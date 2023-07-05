@@ -1,4 +1,5 @@
-import Link from 'next/link';
+import { NavBar } from '../components/Navbar';
+import './global.css';
 
 export default function RootLayout({
   children,
@@ -9,13 +10,10 @@ export default function RootLayout({
     <html>
       <head>
         <title>Profit Pulse</title>
-        <link rel="icon" href="/favicon.svg" sizes="any" />
+        <link rel='icon' href='/logo.svg' sizes='any' />
       </head>
       <body>
-        <nav>
-          <Link href="/">Home</Link>
-          <Link href="/transactions">Transactions</Link>
-        </nav>
+        <NavBar />
         {children}
       </body>
     </html>
