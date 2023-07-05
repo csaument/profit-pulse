@@ -4,5 +4,5 @@ export default function HomePage() {
       <h1>Profit Pulse</h1>
       <p>Content</p>
     </div>
-  )
+  );
 }

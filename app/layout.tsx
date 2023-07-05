@@ -1,12 +1,23 @@
+import Link from 'next/link';
+
 export default function RootLayout({
-    children,
+  children,
 }: {
-    children: React.ReactNode;
+  children: React.ReactNode;
 }) {
-    return (
-        <html>
-            <head></head>
-            <body>{children}</body>
-        </html>
-    )
+  return (
+    <html>
+      <head>
+        <title>Profit Pulse</title>
+        <link rel="icon" href="/favicon.svg" sizes="any" />
+      </head>
+      <body>
+        <nav>
+          <Link href="/">Home</Link>
+          <Link href="/transactions">Transactions</Link>
+        </nav>
+        {children}
+      </body>
+    </html>
+  );
 }

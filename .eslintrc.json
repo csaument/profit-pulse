@@ -19,7 +19,15 @@
     ],
     "quotes": ["error", "single"],
     "indent": ["error", 2],
-    "no-multi-spaces": "error"
+    "no-multi-spaces": "error",
+    "prettier/prettier": [
+      "error",
+      {
+        "tabWidth": 2,
+        "useTabs": false,
+        "singleQuote": true
+      }
+    ]
   },
   "ignorePatterns": ["src/**/*.test.ts", "src/frontend/generated/*"]
 }
