@@ -1,18 +1,54 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 export default function TaxPage() {
   const [type, setType] = useState('W2');
   const [frequency, setFrequency] = useState('Monthly');
   const [state, setState] = useState('CA');
   const [income, setIncome] = useState(0);
+  const [deductions, setDeductions] = useState(13850);
   const [otherIncome, setOtherIncome] = useState(0);
   const [filingStatus, setFilingStatus] = useState('S');
+
+  const taxData = useMemo(() => {
+    // Perform tax calculations here based on the state values
+    const grossIncome = 0;
+    const adjustedGrossIncome = 0;
+    const ficaTax = 0;
+    const medicareTax = 0;
+    const selfEmploymentTax = 0;
+    const federalTax = 0;
+    const stateTax = 0;
+    const netIncome = 0;
+
+    // Return the calculated tax data
+    return {
+      grossIncome,
+      adjustedGrossIncome,
+      ficaTax,
+      medicareTax,
+      selfEmploymentTax,
+      federalTax,
+      stateTax,
+      netIncome,
+    };
+  }, [type, frequency, state, income, deductions, otherIncome, filingStatus]);
 
   return (
     <div className='w-full max-w-xs'>
       <h1 className='text-2xl font-bold mb-4'>Tax Estimator</h1>
+      <div>
+        <h2>Tax Data</h2>
+        <p>Gross Income: {taxData.grossIncome}</p>
+        <p>Adjusted Gross Income: {taxData.adjustedGrossIncome}</p>
+        <p>FICA Tax: {taxData.ficaTax}</p>
+        <p>Medicare Tax: {taxData.medicareTax}</p>
+        <p>Self-Employment Tax: {taxData.selfEmploymentTax}</p>
+        <p>Federal Tax: {taxData.federalTax}</p>
+        <p>State Tax: {taxData.stateTax}</p>
+        <p>Net Income: {taxData.netIncome}</p>
+      </div>
       <form className='bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4'>
         <div className='mb-4'>
           <label htmlFor='type' className='block mb-2'>
@@ -83,6 +119,19 @@ export default function TaxPage() {
             placeholder='Enter your income'
             value={income}
             onChange={(e) => setIncome(parseFloat(e.target.value))}
+            className='block w-full p-2 border border-gray-300 rounded'
+          />
+        </div>
+        <div className='mb-4'>
+          <label htmlFor='deductions' className='block mb-2'>
+            Deductions
+          </label>
+          <input
+            type='number'
+            id='deductions'
+            placeholder='Deductions'
+            value={deductions}
+            onChange={(e) => setDeductions(parseFloat(e.target.value))}
             className='block w-full p-2 border border-gray-300 rounded'
           />
         </div>
