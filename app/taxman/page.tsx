@@ -11,16 +11,134 @@ export default function TaxPage() {
   const [otherIncome, setOtherIncome] = useState(0);
   const [filingStatus, setFilingStatus] = useState('S');
 
+  interface TaxBracket {
+    minIncome: number;
+    maxIncome: number;
+    taxRate: number;
+  }
+
+  const brackets_fed: TaxBracket[] = [
+    {
+      minIncome: 0,
+      maxIncome: 11000,
+      taxRate: 0.1,
+    },
+    {
+      minIncome: 11001,
+      maxIncome: 44725,
+      taxRate: 0.12,
+    },
+    {
+      minIncome: 44726,
+      maxIncome: 95375,
+      taxRate: 0.22,
+    },
+    {
+      minIncome: 95376,
+      maxIncome: 182100,
+      taxRate: 0.24,
+    },
+    {
+      minIncome: 182101,
+      maxIncome: 231250,
+      taxRate: 0.32,
+    },
+    {
+      minIncome: 231251,
+      maxIncome: 578125,
+      taxRate: 0.35,
+    },
+    {
+      minIncome: 578126,
+      maxIncome: Infinity,
+      taxRate: 0.37,
+    },
+  ];
+
+  const brackets_ca = [
+    {
+      minIncome: 0,
+      maxIncome: 17618,
+      taxRate: 0.01,
+    },
+    {
+      minIncome: 17619,
+      maxIncome: 41766,
+      taxRate: 0.02,
+    },
+    {
+      minIncome: 41767,
+      maxIncome: 65920,
+      taxRate: 0.04,
+    },
+    {
+      minIncome: 65921,
+      maxIncome: 91506,
+      taxRate: 0.06,
+    },
+    {
+      minIncome: 91507,
+      maxIncome: 115648,
+      taxRate: 0.083,
+    },
+    {
+      minIncome: 115649,
+      maxIncome: 590746,
+      taxRate: 0.103,
+    },
+    {
+      minIncome: 590747,
+      maxIncome: 708890,
+      taxRate: 0.113,
+    },
+    {
+      minIncome: 708891,
+      maxIncome: 1181484,
+      taxRate: 0.123,
+    },
+    {
+      minIncome: 1181485,
+      maxIncome: 1999999,
+      taxRate: 0.133,
+    },
+  ];
+
+  const calculate_tax = (income: number, brackets: TaxBracket[]): number => {
+    let remainingIncome = income;
+    let taxObligation = 0;
+
+    for (const bracket of brackets) {
+      const { minIncome, maxIncome, taxRate } = bracket;
+
+      if (remainingIncome <= 0) {
+        break;
+      }
+
+      const taxableIncome = Math.min(remainingIncome, maxIncome - minIncome);
+      const taxAmount = taxableIncome * taxRate;
+      taxObligation += taxAmount;
+      remainingIncome -= taxableIncome;
+    }
+
+    return taxObligation;
+  };
+
   const taxData = useMemo(() => {
     // Perform tax calculations here based on the state values
-    const grossIncome = 0;
-    const adjustedGrossIncome = 0;
-    const ficaTax = 0;
-    const medicareTax = 0;
-    const selfEmploymentTax = 0;
-    const federalTax = 0;
-    const stateTax = 0;
-    const netIncome = 0;
+    const grossIncome = income + otherIncome;
+    const adjustedGrossIncome = Math.max(grossIncome - deductions, 0);
+    const ficaTax = 0.062 * adjustedGrossIncome;
+    const medicareTax = 0.0145 * adjustedGrossIncome;
+    const selfEmploymentTax = '1099' == type ? 0.062 * adjustedGrossIncome : 0;
+    const federalTax = calculate_tax(adjustedGrossIncome, brackets_fed);
+    const stateTax = calculate_tax(adjustedGrossIncome, brackets_ca);
+    const netIncome =
+      grossIncome -
+      ficaTax -
+      medicareTax -
+      selfEmploymentTax -
+      federalTax -
+      stateTax;
 
     // Return the calculated tax data
     return {
@@ -39,16 +157,81 @@ export default function TaxPage() {
     <div className='w-full max-w-xs'>
       <h1 className='text-2xl font-bold mb-4'>Tax Estimator</h1>
       <div>
-        <h2>Tax Data</h2>
-        <p>Gross Income: {taxData.grossIncome}</p>
-        <p>Adjusted Gross Income: {taxData.adjustedGrossIncome}</p>
-        <p>FICA Tax: {taxData.ficaTax}</p>
-        <p>Medicare Tax: {taxData.medicareTax}</p>
-        <p>Self-Employment Tax: {taxData.selfEmploymentTax}</p>
-        <p>Federal Tax: {taxData.federalTax}</p>
-        <p>State Tax: {taxData.stateTax}</p>
-        <p>Net Income: {taxData.netIncome}</p>
+        <h2 className='text-2xl font-bold mb-4'>Tax Data</h2>
+        <p className='mb-2'>
+          Gross Income:{' '}
+          <span className='font-bold'>
+            {taxData.grossIncome.toLocaleString('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            })}
+          </span>
+        </p>
+        <p className='mb-2'>
+          Adjusted Gross Income:{' '}
+          <span className='font-bold'>
+            {taxData.adjustedGrossIncome.toLocaleString('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            })}
+          </span>
+        </p>
+        <p className='mb-2'>
+          FICA Tax:{' '}
+          <span className='font-bold'>
+            {taxData.ficaTax.toLocaleString('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            })}
+          </span>
+        </p>
+        <p className='mb-2'>
+          Medicare Tax:{' '}
+          <span className='font-bold'>
+            {taxData.medicareTax.toLocaleString('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            })}
+          </span>
+        </p>
+        <p className='mb-2'>
+          Self-Employment Tax:{' '}
+          <span className='font-bold'>
+            {taxData.selfEmploymentTax.toLocaleString('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            })}
+          </span>
+        </p>
+        <p className='mb-2'>
+          Federal Tax:{' '}
+          <span className='font-bold'>
+            {taxData.federalTax.toLocaleString('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            })}
+          </span>
+        </p>
+        <p className='mb-2'>
+          State Tax:{' '}
+          <span className='font-bold'>
+            {taxData.stateTax.toLocaleString('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            })}
+          </span>
+        </p>
+        <p className='mb-2'>
+          Net Income:{' '}
+          <span className='font-bold'>
+            {taxData.netIncome.toLocaleString('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            })}
+          </span>
+        </p>
       </div>
+
       <form className='bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4'>
         <div className='mb-4'>
           <label htmlFor='type' className='block mb-2'>
