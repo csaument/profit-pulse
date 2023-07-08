@@ -103,27 +103,26 @@ export default function TaxPage() {
     },
   ];
 
-  const calculate_tax = (income: number, brackets: TaxBracket[]): number => {
-    let remainingIncome = income;
-    let taxObligation = 0;
+  const taxData = useMemo(() => {
+    const calculate_tax = (income: number, brackets: TaxBracket[]): number => {
+      let remainingIncome = income;
+      let taxObligation = 0;
 
-    for (const bracket of brackets) {
-      const { minIncome, maxIncome, taxRate } = bracket;
+      for (const bracket of brackets) {
+        const { minIncome, maxIncome, taxRate } = bracket;
 
-      if (remainingIncome <= 0) {
-        break;
+        if (remainingIncome <= 0) {
+          break;
+        }
+
+        const taxableIncome = Math.min(remainingIncome, maxIncome - minIncome);
+        const taxAmount = taxableIncome * taxRate;
+        taxObligation += taxAmount;
+        remainingIncome -= taxableIncome;
       }
 
-      const taxableIncome = Math.min(remainingIncome, maxIncome - minIncome);
-      const taxAmount = taxableIncome * taxRate;
-      taxObligation += taxAmount;
-      remainingIncome -= taxableIncome;
-    }
-
-    return taxObligation;
-  };
-
-  const taxData = useMemo(() => {
+      return taxObligation;
+    };
     // Perform tax calculations here based on the state values
     const grossIncome = income + otherIncome;
     const adjustedGrossIncome = Math.max(grossIncome - deductions, 0);
@@ -151,7 +150,7 @@ export default function TaxPage() {
       stateTax,
       netIncome,
     };
-  }, [type, frequency, state, income, deductions, otherIncome, filingStatus]);
+  }, [income, otherIncome, deductions, type, brackets_fed, brackets_ca]);
 
   return (
     <div className='w-full max-w-xs'>
