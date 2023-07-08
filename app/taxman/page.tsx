@@ -1,6 +1,13 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import PocketBase from 'pocketbase';
+
+interface TaxBracket {
+  minIncome: number;
+  maxIncome: number;
+  taxRate: number;
+}
 
 export default function TaxPage() {
   const [type, setType] = useState('W2');
@@ -8,100 +15,60 @@ export default function TaxPage() {
   const [state, setState] = useState('CA');
   const [income, setIncome] = useState(0);
   const [deductions, setDeductions] = useState(13850);
-  const [otherIncome, setOtherIncome] = useState(0);
   const [filingStatus, setFilingStatus] = useState('S');
 
-  interface TaxBracket {
-    minIncome: number;
-    maxIncome: number;
-    taxRate: number;
-  }
+  // Define the tax brackets for federal and state
+  const [bracketsFed, setBracketsFed] = useState<TaxBracket[]>([]);
+  const [bracketsState, setBracketsState] = useState<TaxBracket[]>([]);
 
-  const brackets_fed: TaxBracket[] = [
-    {
-      minIncome: 0,
-      maxIncome: 11000,
-      taxRate: 0.1,
-    },
-    {
-      minIncome: 11001,
-      maxIncome: 44725,
-      taxRate: 0.12,
-    },
-    {
-      minIncome: 44726,
-      maxIncome: 95375,
-      taxRate: 0.22,
-    },
-    {
-      minIncome: 95376,
-      maxIncome: 182100,
-      taxRate: 0.24,
-    },
-    {
-      minIncome: 182101,
-      maxIncome: 231250,
-      taxRate: 0.32,
-    },
-    {
-      minIncome: 231251,
-      maxIncome: 578125,
-      taxRate: 0.35,
-    },
-    {
-      minIncome: 578126,
-      maxIncome: Infinity,
-      taxRate: 0.37,
-    },
-  ];
+  // Fetch the tax brackets from the database based on the filing status
+  useEffect(() => {
+    // Create an instance of PocketBase
+    const pb = new PocketBase('http://127.0.0.1:8090');
+    const year = 2023;
 
-  const brackets_ca = [
-    {
-      minIncome: 0,
-      maxIncome: 17618,
-      taxRate: 0.01,
-    },
-    {
-      minIncome: 17619,
-      maxIncome: 41766,
-      taxRate: 0.02,
-    },
-    {
-      minIncome: 41767,
-      maxIncome: 65920,
-      taxRate: 0.04,
-    },
-    {
-      minIncome: 65921,
-      maxIncome: 91506,
-      taxRate: 0.06,
-    },
-    {
-      minIncome: 91507,
-      maxIncome: 115648,
-      taxRate: 0.083,
-    },
-    {
-      minIncome: 115649,
-      maxIncome: 590746,
-      taxRate: 0.103,
-    },
-    {
-      minIncome: 590747,
-      maxIncome: 708890,
-      taxRate: 0.113,
-    },
-    {
-      minIncome: 708891,
-      maxIncome: 1181484,
-      taxRate: 0.123,
-    },
-    {
-      minIncome: 1181485,
-      maxIncome: 1999999,
-      taxRate: 0.133,
-    },
-  ];
+    const fetchFedTaxBrackets = async () => {
+      const filter = `jurisdiction = "Federal" && filing_status="${filingStatus}" && year=${year}`;
+
+      const result = await pb.collection('brackets').getList(1, 50, { filter });
+      const brackets = result.items.map((item) => ({
+        minIncome: item.lower_bound,
+        maxIncome: item.upper_bound,
+        taxRate: item.tax_rate,
+      }));
+
+      setBracketsFed(brackets);
+    };
+
+    fetchFedTaxBrackets();
+  }, [filingStatus]);
+
+  // Fetch the tax brackets from the database based on the filing status
+  useEffect(() => {
+    // Create an instance of PocketBase
+    const pb = new PocketBase('http://127.0.0.1:8090');
+    const year = 2023;
+
+    const fetchStateTaxBrackets = async () => {
+      let filter = `jurisdiction = "${state}" && filing_status="${filingStatus}" && year=${year}`;
+      let result = await pb.collection('brackets').getList(1, 50, { filter });
+      if (0 === result.items.length) {
+        filter = `jurisdiction = "${state}" && filing_status="${filingStatus}" && year=${
+          year - 1
+        }`;
+        result = await pb.collection('brackets').getList(1, 50, { filter });
+      }
+      const brackets = result.items.map((item) => ({
+        minIncome: item.lower_bound,
+        maxIncome: item.upper_bound,
+        taxRate: item.tax_rate,
+      }));
+
+      setBracketsState(brackets);
+    };
+
+    fetchStateTaxBrackets();
+  }, [filingStatus, state]);
 
   const taxData = useMemo(() => {
     const calculate_tax = (income: number, brackets: TaxBracket[]): number => {
@@ -123,14 +90,23 @@ export default function TaxPage() {
 
       return taxObligation;
     };
-    // Perform tax calculations here based on the state values
-    const grossIncome = income + otherIncome;
-    const adjustedGrossIncome = Math.max(grossIncome - deductions, 0);
+    // Perform tax calculations
+    const grossIncome = income;
+    const annualIncome = 'Monthly' === frequency ? income * 12 : income;
+    const annualAdjustedGross = Math.max(annualIncome - deductions, 0);
+    const adjustedGrossIncome =
+      'Monthly' === frequency
+        ? Math.max(grossIncome - deductions / 12, 0)
+        : annualAdjustedGross;
     const ficaTax = 0.062 * adjustedGrossIncome;
     const medicareTax = 0.0145 * adjustedGrossIncome;
     const selfEmploymentTax = '1099' == type ? 0.062 * adjustedGrossIncome : 0;
-    const federalTax = calculate_tax(adjustedGrossIncome, brackets_fed);
-    const stateTax = calculate_tax(adjustedGrossIncome, brackets_ca);
+    const annualFederalTax = calculate_tax(annualAdjustedGross, bracketsFed);
+    const federalTax =
+      'Monthly' === frequency ? annualFederalTax / 12 : annualFederalTax;
+    const annualStateTax = calculate_tax(annualAdjustedGross, bracketsState);
+    const stateTax =
+      'Monthly' === frequency ? annualStateTax / 12 : annualStateTax;
     const netIncome =
       grossIncome -
       ficaTax -
@@ -150,13 +126,14 @@ export default function TaxPage() {
       stateTax,
       netIncome,
     };
-  }, [income, otherIncome, deductions, type, brackets_fed, brackets_ca]);
+  }, [income, deductions, type, bracketsFed, bracketsState, frequency]);
 
   return (
     <div className='w-full max-w-xs'>
       <h1 className='text-2xl font-bold mb-4'>Tax Estimator</h1>
       <div>
         <h2 className='text-2xl font-bold mb-4'>Tax Data</h2>
+        <h3 className='text-xl font-bold mb-4'>{frequency}</h3>
         <p className='mb-2'>
           Gross Income:{' '}
           <span className='font-bold'>
@@ -284,11 +261,11 @@ export default function TaxPage() {
             onChange={(e) => setFilingStatus(e.target.value)}
             className='block w-full p-2 border border-gray-300 rounded'
           >
-            <option value='S'>Single</option>
-            <option value='MJ'>Married, filing jointly</option>
-            <option value='MS'>Married, filing separately</option>
-            <option value='H'>Head of household</option>
-            <option value='W'>Widow(er)</option>
+            <option value='single'>Single</option>
+            <option value='joint'>Married, filing jointly</option>
+            <option value='separate'>Married, filing separately</option>
+            <option value='head'>Head of household</option>
+            <option value='widow'>Widow(er)</option>
           </select>
         </div>
         <div className='mb-4'>
@@ -314,19 +291,6 @@ export default function TaxPage() {
             placeholder='Deductions'
             value={deductions}
             onChange={(e) => setDeductions(parseFloat(e.target.value))}
-            className='block w-full p-2 border border-gray-300 rounded'
-          />
-        </div>
-        <div className='mb-4'>
-          <label htmlFor='other' className='block mb-2'>
-            Other Income
-          </label>
-          <input
-            type='number'
-            id='other'
-            placeholder='Other income'
-            value={otherIncome}
-            onChange={(e) => setOtherIncome(parseFloat(e.target.value))}
             className='block w-full p-2 border border-gray-300 rounded'
           />
         </div>

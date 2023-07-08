@@ -21,6 +21,7 @@
     "jsx-quotes": ["error", "prefer-single"],
     "indent": ["error", 2],
     "no-multi-spaces": "error",
+    "comma-dangle": ["error", "only-multiline"],
     "prettier/prettier": [
       "error",
       {
@@ -34,6 +35,7 @@
   "ignorePatterns": [
     "src/**/*.test.ts",
     "src/frontend/generated/*",
-    "tailwind.config.js"
+    "tailwind.config.js",
+    "data/uploader.js"
   ]
 }
