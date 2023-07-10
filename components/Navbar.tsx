@@ -21,14 +21,14 @@ export function NavBar() {
               width='54'
               height='54'
             />
-            <span className='font-semibold text-xl tracking-tight text-green-900'>
+            <span className='font-semibold text-2xl tracking-tight text-green-900'>
               Profit Pulse
             </span>
           </Link>
         </div>
         <div className='block lg:hidden'>
           <button
-            className='flex items-center px-3 py-2 border rounded text-green-900 border-green-900 hover:text-gray-300 hover:border-gray-300'
+            className='flex items-center px-3 py-2 border rounded text-green-900 border-green-900 hover:text-gray-600 hover:border-gray-600'
             onClick={() => setMenuOpen(!menuOpen)}
           >
             <svg
@@ -49,13 +49,13 @@ export function NavBar() {
           <div className='text-sm lg:flex-grow'>
             <Link
               href='/taxman'
-              className='block mt-4 lg:inline-block lg:mt-0 text-green-900 hover:text-gray-300 mr-4'
+              className='block mt-2 lg:inline-block lg:mt-0 text-green-900 hover:text-gray-600 mr-4 text-xl'
             >
               Tax Estimator
             </Link>
             <Link
               href='/transactions'
-              className='block mt-4 lg:inline-block lg:mt-0 text-green-900 hover:text-gray-300 mr-4'
+              className='block mt-2 lg:inline-block lg:mt-0 text-green-900 hover:text-gray-600 mr-4 text-xl'
             >
               Transactions
             </Link>

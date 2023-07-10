@@ -3,23 +3,32 @@
 import { useState, useMemo, useEffect } from 'react';
 import PocketBase from 'pocketbase';
 
+import { RevenueForm } from '../../components/RevenueForm';
+
 interface TaxBracket {
   minIncome: number;
   maxIncome: number;
   taxRate: number;
 }
 
+interface Revenue {
+  type: string;
+  frequency: string;
+  state: string;
+  income: number;
+}
+
 export default function TaxPage() {
-  const [type, setType] = useState('W2');
-  const [frequency, setFrequency] = useState('Monthly');
-  const [state, setState] = useState('CA');
-  const [income, setIncome] = useState(0);
-  const [deductions, setDeductions] = useState(13850);
+  const [frequencyDisplay, setFequencyDisplay] = useState('Monthly');
   const [filingStatus, setFilingStatus] = useState('S');
+  const [deductions, setDeductions] = useState(13850);
+  const [revenues, setRevenues] = useState<Revenue[]>([]);
 
   // Define the tax brackets for federal and state
   const [bracketsFed, setBracketsFed] = useState<TaxBracket[]>([]);
-  const [bracketsState, setBracketsState] = useState<TaxBracket[]>([]);
+  const [bracketsStates, setBracketsStates] = useState<{
+    [state: string]: TaxBracket[];
+  }>({});
 
   // Fetch the tax brackets from the database based on the filing status
   useEffect(() => {
@@ -45,14 +54,13 @@ export default function TaxPage() {
 
   // Fetch the tax brackets from the database based on the filing status
   useEffect(() => {
-    // Create an instance of PocketBase
     const pb = new PocketBase('http://127.0.0.1:8090');
     const year = 2023;
 
-    const fetchStateTaxBrackets = async () => {
+    const fetchStateTaxBrackets = async (state: string) => {
       let filter = `jurisdiction = "${state}" && filing_status="${filingStatus}" && year=${year}`;
       let result = await pb.collection('brackets').getList(1, 50, { filter });
-      if (0 === result.items.length) {
+      if (result.items.length === 0) {
         filter = `jurisdiction = "${state}" && filing_status="${filingStatus}" && year=${
           year - 1
         }`;
@@ -64,11 +72,54 @@ export default function TaxPage() {
         taxRate: item.tax_rate,
       }));
 
-      setBracketsState(brackets);
+      setBracketsStates((prevState) => ({
+        ...prevState,
+        [state]: brackets,
+      }));
     };
 
-    fetchStateTaxBrackets();
-  }, [filingStatus, state]);
+    // Fetch state tax brackets when the filingStatus is changed
+    Object.keys(bracketsStates).forEach((state) => {
+      fetchStateTaxBrackets(state);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filingStatus]);
+
+  // Fetch the tax brackets from the database based on the revenues array
+  useEffect(() => {
+    const pb = new PocketBase('http://127.0.0.1:8090');
+    const year = 2023;
+
+    const fetchStateTaxBrackets = async (state: string) => {
+      let filter = `jurisdiction = "${state}" && filing_status="${filingStatus}" && year=${year}`;
+      let result = await pb.collection('brackets').getList(1, 50, { filter });
+      if (result.items.length === 0) {
+        filter = `jurisdiction = "${state}" && filing_status="${filingStatus}" && year=${
+          year - 1
+        }`;
+        result = await pb.collection('brackets').getList(1, 50, { filter });
+      }
+      const brackets = result.items.map((item) => ({
+        minIncome: item.lower_bound,
+        maxIncome: item.upper_bound,
+        taxRate: item.tax_rate,
+      }));
+
+      setBracketsStates((prevState) => ({
+        ...prevState,
+        [state]: brackets,
+      }));
+    };
+
+    // Fetch state tax brackets for each new state in the revenues array
+    revenues.forEach((revenue) => {
+      const { state } = revenue;
+      if (undefined === bracketsStates[state]) {
+        fetchStateTaxBrackets(state);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revenues]);
 
   const taxData = useMemo(() => {
     const calculate_tax = (income: number, brackets: TaxBracket[]): number => {
@@ -90,25 +141,40 @@ export default function TaxPage() {
 
       return taxObligation;
     };
+
     // Perform tax calculations
-    const grossIncome = income;
-    const annualIncome = 'Monthly' === frequency ? income * 12 : income;
-    const annualAdjustedGross = Math.max(annualIncome - deductions, 0);
-    const adjustedGrossIncome =
-      'Monthly' === frequency
-        ? Math.max(grossIncome - deductions / 12, 0)
-        : annualAdjustedGross;
+    let annualIncome = 0;
+    let selfEmploymentIncome = 0;
+
+    for (const revenue of revenues) {
+      if (revenue.frequency === 'Yearly' || revenue.frequency === 'One Time') {
+        annualIncome += revenue.income;
+      } else {
+        annualIncome += revenue.income * 12;
+      }
+
+      if (revenue.type === '1099') {
+        selfEmploymentIncome += revenue.income;
+      }
+    }
+
+    const adjustedGrossIncome = Math.max(annualIncome - deductions, 0);
+    selfEmploymentIncome = Math.min(adjustedGrossIncome, selfEmploymentIncome);
     const ficaTax = 0.062 * adjustedGrossIncome;
     const medicareTax = 0.0145 * adjustedGrossIncome;
-    const selfEmploymentTax = '1099' == type ? 0.062 * adjustedGrossIncome : 0;
-    const annualFederalTax = calculate_tax(annualAdjustedGross, bracketsFed);
-    const federalTax =
-      'Monthly' === frequency ? annualFederalTax / 12 : annualFederalTax;
-    const annualStateTax = calculate_tax(annualAdjustedGross, bracketsState);
-    const stateTax =
-      'Monthly' === frequency ? annualStateTax / 12 : annualStateTax;
+    const selfEmploymentTax = 0.062 * selfEmploymentIncome;
+    const federalTax = calculate_tax(adjustedGrossIncome, bracketsFed);
+
+    let stateTax = 0;
+    for (const revenue of revenues) {
+      const stateBrackets = bracketsStates[revenue.state];
+      if (stateBrackets !== undefined) {
+        stateTax += calculate_tax(revenue.income, stateBrackets);
+      }
+    }
+
     const netIncome =
-      grossIncome -
+      annualIncome -
       ficaTax -
       medicareTax -
       selfEmploymentTax -
@@ -117,7 +183,7 @@ export default function TaxPage() {
 
     // Return the calculated tax data
     return {
-      grossIncome,
+      annualIncome,
       adjustedGrossIncome,
       ficaTax,
       medicareTax,
@@ -126,139 +192,116 @@ export default function TaxPage() {
       stateTax,
       netIncome,
     };
-  }, [income, deductions, type, bracketsFed, bracketsState, frequency]);
+  }, [revenues, deductions, bracketsFed, bracketsStates]);
+
+  const setStandardDeduction = (status: string) => {
+    switch (status) {
+      case 'single':
+      case 'separate':
+        if (deductions === 27700 || deductions === 20800) {
+          setDeductions(13850);
+        }
+        break;
+      case 'joint':
+      case 'widow':
+        if (deductions === 13850 || deductions === 20800) {
+          setDeductions(27700);
+        }
+        break;
+      case 'head':
+        if (deductions === 13850 || deductions === 27700) {
+          setDeductions(20800);
+        }
+        break;
+      default:
+        break;
+    }
+  };
+
+  const formatCurrency = (value: number) =>
+    value.toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    });
+
+  const renderTaxData = (label: string, value: number) => (
+    <p className='mb-1'>
+      {label}:{' '}
+      <span className='font-bold text-green-900 dark:text-white'>
+        {formatCurrency(value)}
+      </span>
+    </p>
+  );
 
   return (
-    <div className='w-full max-w-xs'>
-      <h1 className='text-2xl font-bold mb-4'>Tax Estimator</h1>
-      <div>
-        <h2 className='text-2xl font-bold mb-4'>Tax Data</h2>
-        <h3 className='text-xl font-bold mb-4'>{frequency}</h3>
-        <p className='mb-2'>
-          Gross Income:{' '}
-          <span className='font-bold'>
-            {taxData.grossIncome.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            })}
-          </span>
-        </p>
-        <p className='mb-2'>
-          Adjusted Gross Income:{' '}
-          <span className='font-bold'>
-            {taxData.adjustedGrossIncome.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            })}
-          </span>
-        </p>
-        <p className='mb-2'>
-          FICA Tax:{' '}
-          <span className='font-bold'>
-            {taxData.ficaTax.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            })}
-          </span>
-        </p>
-        <p className='mb-2'>
-          Medicare Tax:{' '}
-          <span className='font-bold'>
-            {taxData.medicareTax.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            })}
-          </span>
-        </p>
-        <p className='mb-2'>
-          Self-Employment Tax:{' '}
-          <span className='font-bold'>
-            {taxData.selfEmploymentTax.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            })}
-          </span>
-        </p>
-        <p className='mb-2'>
-          Federal Tax:{' '}
-          <span className='font-bold'>
-            {taxData.federalTax.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            })}
-          </span>
-        </p>
-        <p className='mb-2'>
-          State Tax:{' '}
-          <span className='font-bold'>
-            {taxData.stateTax.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            })}
-          </span>
-        </p>
-        <p className='mb-2'>
-          Net Income:{' '}
-          <span className='font-bold'>
-            {taxData.netIncome.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            })}
-          </span>
-        </p>
-      </div>
+    <div className='flex items-center justify-center bg-gray-100'>
+      <div className='w-full max-w-xs'>
+        <h1 className='text-2xl font-bold mb-1'>Tax Estimator</h1>
+        <div>
+          {frequencyDisplay === 'Yearly' ? (
+            <>
+              {renderTaxData('Gross Income', taxData.annualIncome)}
+              {renderTaxData(
+                'Adjusted Gross Income',
+                taxData.adjustedGrossIncome
+              )}
+              {renderTaxData('FICA Tax', taxData.ficaTax)}
+              {renderTaxData('Medicare Tax', taxData.medicareTax)}
+              {renderTaxData('Self-Employment Tax', taxData.selfEmploymentTax)}
+              {renderTaxData('Federal Tax', taxData.federalTax)}
+              {renderTaxData('State Tax', taxData.stateTax)}
+              {renderTaxData('Net Income', taxData.netIncome)}
+            </>
+          ) : (
+            <>
+              {renderTaxData('Gross Income', taxData.annualIncome / 12)}
+              {renderTaxData(
+                'Adjusted Gross Income',
+                taxData.adjustedGrossIncome / 12
+              )}
+              {renderTaxData('FICA Tax', taxData.ficaTax / 12)}
+              {renderTaxData('Medicare Tax', taxData.medicareTax / 12)}
+              {renderTaxData(
+                'Self-Employment Tax',
+                taxData.selfEmploymentTax / 12
+              )}
+              {renderTaxData('Federal Tax', taxData.federalTax / 12)}
+              {renderTaxData('State Tax', taxData.stateTax / 12)}
+              {renderTaxData('Net Income', taxData.netIncome / 12)}
+            </>
+          )}
+        </div>
 
-      <form className='bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4'>
-        <div className='mb-4'>
-          <label htmlFor='type' className='block mb-2'>
-            Income Type
-          </label>
-          <select
-            id='type'
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className='block w-full p-2 border border-gray-300 rounded'
+        <button
+          className='px-4 py-2 bg-green-600 text-white rounded hover:bg-gray-600'
+          onClick={() => {
+            switch (frequencyDisplay) {
+              case 'Monthly':
+                setFequencyDisplay('Yearly');
+                break;
+              case 'Yearly':
+                setFequencyDisplay('Monthly');
+                break;
+            }
+          }}
+        >
+          {frequencyDisplay}
+        </button>
+
+        <div className='mb-2'>
+          <label
+            htmlFor='status'
+            className='block mb-2 text-green-900 dark:text-white'
           >
-            <option value='W2'>W2</option>
-            <option value='1099'>1099</option>
-          </select>
-        </div>
-        <div className='mb-4'>
-          <label htmlFor='frequency' className='block mb-2'>
-            Frequency
-          </label>
-          <select
-            id='frequency'
-            value={frequency}
-            onChange={(e) => setFrequency(e.target.value)}
-            className='block w-full p-2 border border-gray-300 rounded'
-          >
-            <option value='Yearly'>Yearly</option>
-            <option value='Monthly'>Monthly</option>
-            <option value='Single'>One time</option>
-          </select>
-        </div>
-        <div className='mb-4'>
-          <label htmlFor='state' className='block mb-2'>
-            State
-          </label>
-          <select
-            id='state'
-            value={state}
-            onChange={(e) => setState(e.target.value)}
-            className='block w-full p-2 border border-gray-300 rounded'
-          >
-            <option value='CA'>California</option>
-          </select>
-        </div>
-        <div className='mb-4'>
-          <label htmlFor='status' className='block mb-2'>
             Filing Status
           </label>
           <select
             id='status'
             value={filingStatus}
-            onChange={(e) => setFilingStatus(e.target.value)}
+            onChange={(e) => {
+              setFilingStatus(e.target.value);
+              setStandardDeduction(e.target.value);
+            }}
             className='block w-full p-2 border border-gray-300 rounded'
           >
             <option value='single'>Single</option>
@@ -268,21 +311,11 @@ export default function TaxPage() {
             <option value='widow'>Widow(er)</option>
           </select>
         </div>
-        <div className='mb-4'>
-          <label htmlFor='income' className='block mb-2'>
-            Income
-          </label>
-          <input
-            type='number'
-            id='income'
-            placeholder='Enter your income'
-            value={income}
-            onChange={(e) => setIncome(parseFloat(e.target.value))}
-            className='block w-full p-2 border border-gray-300 rounded'
-          />
-        </div>
-        <div className='mb-4'>
-          <label htmlFor='deductions' className='block mb-2'>
+        <div className='mb-2'>
+          <label
+            htmlFor='deductions'
+            className='block mb-2 text-black dark:text-white'
+          >
             Deductions
           </label>
           <input
@@ -294,15 +327,57 @@ export default function TaxPage() {
             className='block w-full p-2 border border-gray-300 rounded'
           />
         </div>
-        <div className='flex justify-between'>
-          <button className='px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600'>
-            Add
-          </button>
-          <button className='px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600'>
-            Calculate
-          </button>
-        </div>
-      </form>
+
+        {revenues.map((revenue, index) => (
+          <RevenueForm
+            key={index}
+            type={revenue.type}
+            setType={(newType) => {
+              const updatedRevenues = [...revenues];
+              updatedRevenues[index].type = newType;
+              setRevenues(updatedRevenues);
+            }}
+            frequency={revenue.frequency}
+            setFrequency={(newFrequency) => {
+              const updatedRevenues = [...revenues];
+              updatedRevenues[index].frequency = newFrequency;
+              setRevenues(updatedRevenues);
+            }}
+            state={revenue.state}
+            setState={(newState) => {
+              const updatedRevenues = [...revenues];
+              updatedRevenues[index].state = newState;
+              setRevenues(updatedRevenues);
+            }}
+            income={revenue.income}
+            setIncome={(newIncome) => {
+              const updatedRevenues = [...revenues];
+              updatedRevenues[index].income = newIncome;
+              setRevenues(updatedRevenues);
+            }}
+            onRemove={() => {
+              const updatedRevenues = [...revenues];
+              updatedRevenues.splice(index, 1);
+              setRevenues(updatedRevenues);
+            }}
+          />
+        ))}
+
+        <button
+          className='px-4 py-2 bg-green-600 text-white rounded hover:bg-gray-600'
+          onClick={() => {
+            const newRevenue: Revenue = {
+              type: 'W2',
+              frequency: frequencyDisplay,
+              state: 'CA',
+              income: 0,
+            };
+            setRevenues([...revenues, newRevenue]);
+          }}
+        >
+          Add
+        </button>
+      </div>
     </div>
   );
 }
