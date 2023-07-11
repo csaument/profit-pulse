@@ -54,6 +54,12 @@ export function NavBar() {
               Tax Estimator
             </Link>
             <Link
+              href='/budget-buddy'
+              className='block mt-2 lg:inline-block lg:mt-0 text-green-900 hover:text-gray-600 mr-4 text-xl'
+            >
+              Budget Builder
+            </Link>
+            <Link
               href='/transactions'
               className='block mt-2 lg:inline-block lg:mt-0 text-green-900 hover:text-gray-600 mr-4 text-xl'
             >
